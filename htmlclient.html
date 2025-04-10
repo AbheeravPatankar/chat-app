@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        background-color: #f0f7ff;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #0062cc, #104b8b);
+        color: white;
+        padding: 15px 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+
+      .header h1 {
+        font-size: 24px;
+        margin-bottom: 5px;
+      }
+
+      .status {
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+      }
+
+      .status .indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+      }
+
+      .status .connected {
+        background-color: #4caf50;
+      }
+
+      .status .disconnected {
+        background-color: #f44336;
+      }
+
+      .main-container {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        border-radius: 0 0 8px 8px;
+      }
+
+      .client-list {
+        width: 280px;
+        background-color: #ebf5ff;
+        border-right: 1px solid #d0e3ff;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .client-list-header {
+        background-color: #0062cc;
+        color: white;
+        padding: 12px 15px;
+        font-weight: 500;
+      }
+
+      .clients {
+        flex: 1;
+        overflow-y: auto;
+      }
+
+      .client-item {
+        padding: 12px 15px;
+        border-bottom: 1px solid #d0e3ff;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .client-item:hover {
+        background-color: #d0e3ff;
+      }
+
+      .client-item.selected {
+        background-color: #b3d7ff;
+      }
+
+      .client-name {
+        font-weight: 500;
+        margin-bottom: 3px;
+      }
+
+      .client-id {
+        font-size: 12px;
+        color: #666;
+        word-break: break-all;
+      }
+
+      .chat-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: white;
+      }
+
+      .chat-header {
+        background-color: #0062cc;
+        color: white;
+        padding: 12px 15px;
+        display: flex;
+        align-items: center;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      .recipient-info {
+        flex: 1;
+      }
+
+      .recipient-name {
+        font-weight: 500;
+        margin-bottom: 3px;
+      }
+
+      .recipient-id {
+        font-size: 12px;
+        color: #cce5ff;
+      }
+
+      .messages {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .message {
+        max-width: 80%;
+        margin-bottom: 15px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .message.incoming {
+        align-self: flex-start;
+      }
+
+      .message.outgoing {
+        align-self: flex-end;
+      }
+
+      .message-content {
+        padding: 10px 15px;
+        border-radius: 18px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        word-break: break-word;
+      }
+
+      .incoming .message-content {
+        background-color: #e9f5ff;
+        border-bottom-left-radius: 5px;
+      }
+
+      .outgoing .message-content {
+        background-color: #0078ff;
+        color: white;
+        border-bottom-right-radius: 5px;
+      }
+
+      .message-time {
+        font-size: 12px;
+        color: #999;
+        margin-top: 5px;
+        align-self: flex-end;
+      }
+
+      .message-form {
+        padding: 15px;
+        border-top: 1px solid #eee;
+        display: flex;
+      }
+
+      .message-input {
+        flex: 1;
+        padding: 12px 15px;
+        border: 1px solid #ccc;
+        border-radius: 20px 0 0 20px;
+        outline: none;
+        font-size: 14px;
+      }
+
+      .message-input:focus {
+        border-color: #0078ff;
+      }
+
+      .send-button {
+        background-color: #0078ff;
+        color: white;
+        border: none;
+        border-radius: 0 20px 20px 0;
+        padding: 0 20px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background-color 0.2s;
+      }
+
+      .send-button:hover {
+        background-color: #0062cc;
+      }
+
+      .send-button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #666;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .empty-state-icon {
+        font-size: 50px;
+        margin-bottom: 20px;
+        color: #b3d7ff;
+      }
+
+      .empty-clients {
+        padding: 20px;
+        text-align: center;
+        color: #666;
+        font-style: italic;
+      }
+
+      .notifications {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 1000;
+      }
+
+      .notification {
+        background: linear-gradient(135deg, #0078ff, #0062cc);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 5px;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s, fadeOut 0.5s 4.5s;
+        opacity: 0;
+        animation-fill-mode: forwards;
+        max-width: 300px;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>WebSocket Chat</h1>
+      <div class="status">
+        <span class="indicator disconnected" id="status-indicator"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="main-container">
+      <div class="client-list">
+        <div class="client-list-header">Available Clients</div>
+        <div class="clients" id="clients-container">
+          <div class="empty-clients" id="empty-clients">
+            No other clients connected
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-area" id="chat-area">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-state-icon">👋</div>
+          <h2>Welcome to WebSocket Chat</h2>
+          <p>Select a client from the list to start chatting</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="notifications" id="notifications"></div>
+
+    <script>
+      const socket = io("http://localhost:3000");
+
+      const client_id =
+        prompt("Enter your client ID (integer):") ||
+        Math.floor(Math.random() * 10000);
+
+      let selectedClientId = null;
+      let chatHistory = {};
+
+      socket.emit("register", { client_id });
+
+      socket.on("connect", () => {
+        console.log("Connected as", client_id);
+        document
+          .getElementById("status-indicator")
+          .classList.replace("disconnected", "connected");
+        document.getElementById(
+          "status-text"
+        ).innerText = `Connected as ${client_id}`;
+      });
+
+      socket.on("disconnect", () => {
+        document
+          .getElementById("status-indicator")
+          .classList.replace("connected", "disconnected");
+        document.getElementById("status-text").innerText = "Disconnected";
+      });
+
+      socket.on("client-list", (clients) => {
+        updateClientList(clients);
+      });
+
+      socket.on("client-list-update", (clients) => {
+        updateClientList(clients);
+      });
+
+      socket.on("private-message", (data) => {
+        const { from_id, message, timestamp } = data;
+        if (!chatHistory[from_id]) chatHistory[from_id] = [];
+        chatHistory[from_id].push({
+          content: message,
+          timestamp,
+          incoming: true,
+        });
+
+        if (selectedClientId === from_id) {
+          renderMessages();
+        } else {
+          notify(`New message from ${from_id}`);
+        }
+      });
+
+      socket.on("message-delivered", (data) => {
+        notify(`Message delivered to ${data.to_id}`);
+      });
+
+      socket.on("delivery-failed", (data) => {
+        notify(`Delivery failed to ${data.to_id}: ${data.reason}`);
+      });
+
+      function notify(msg) {
+        const div = document.createElement("div");
+        div.className = "notification";
+        div.textContent = msg;
+        document.getElementById("notifications").appendChild(div);
+        setTimeout(() => div.remove(), 5000);
+      }
+
+      function updateClientList(clients) {
+        const container = document.getElementById("clients-container");
+        container.innerHTML = "";
+
+        Object.entries(clients).forEach(([id, client]) => {
+          if (id == client_id) return;
+          const div = document.createElement("div");
+          div.className = "client-item";
+          div.innerHTML = `<div class="client-name">${client.username}</div><div class="client-id">${id}</div>`;
+          div.onclick = () => {
+            selectedClientId = id;
+            document
+              .querySelectorAll(".client-item")
+              .forEach((el) => el.classList.remove("selected"));
+            div.classList.add("selected");
+            setupChatBox();
+            renderMessages();
+          };
+          container.appendChild(div);
+        });
+
+        document.getElementById("empty-clients").style.display =
+          Object.keys(clients).length <= 1 ? "block" : "none";
+      }
+
+      function setupChatBox() {
+        const chatArea = document.getElementById("chat-area");
+        chatArea.innerHTML = `
+          <div class="chat-header">
+            <div class="recipient-info">
+              <div class="recipient-name">Chatting with ${selectedClientId}</div>
+              <div class="recipient-id">${selectedClientId}</div>
+            </div>
+          </div>
+          <div class="messages" id="chat-messages-container"></div>
+          <form class="message-form" id="message-form">
+            <input type="text" class="message-input" id="message-input" placeholder="Type your message..." />
+            <button class="send-button" id="send-button" type="submit">Send</button>
+          </form>
+        `;
+
+        document.getElementById("message-form").onsubmit = (e) => {
+          e.preventDefault();
+          const input = document.getElementById("message-input");
+          const message = input.value.trim();
+          if (!message || !selectedClientId) return;
+
+          const payload = {
+            to_id: selectedClientId,
+            from_id: client_id,
+            message,
+            timestamp: Date.now(),
+          };
+
+          socket.emit("private-message", payload);
+
+          if (!chatHistory[selectedClientId])
+            chatHistory[selectedClientId] = [];
+          chatHistory[selectedClientId].push({
+            content: message,
+            timestamp: payload.timestamp,
+            incoming: false,
+          });
+
+          renderMessages();
+          input.value = "";
+        };
+      }
+
+      function renderMessages() {
+        const container = document.getElementById("chat-messages-container");
+        if (!container || !selectedClientId) return;
+
+        container.innerHTML = "";
+        const messages = chatHistory[selectedClientId] || [];
+
+        messages.forEach((msg) => {
+          const div = document.createElement("div");
+          div.className = `message ${msg.incoming ? "incoming" : "outgoing"}`;
+          div.innerHTML = `
+            <div class="message-content">${msg.content}</div>
+            <div class="message-time">${new Date(
+              msg.timestamp
+            ).toLocaleTimeString()}</div>
+          `;
+          container.appendChild(div);
+        });
+
+        container.scrollTop = container.scrollHeight;
+      }
+    </script>
+  </body>
+</html>
